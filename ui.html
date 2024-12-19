@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Export PNG</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        padding: 20px;
+      }
+      .image-container {
+        margin-top: 20px;
+      }
+      .image-container img {
+        max-width: 100%;
+        height: auto;
+      }
+      .text-layer {
+        margin-top: 10px;
+        border: 1px solid #ccc;
+        padding: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>Export PNG</h2>
+    <button id="export-png">Export PNG</button>
+    <div class="image-container" id="image-container"></div>
+    <div class="text-layers-container" id="text-layers-container"></div>
+
+    <script>
+      const exportButton = document.getElementById('export-png');
+      const imageContainer = document.getElementById('image-container');
+      const textLayersContainer = document.getElementById('text-layers-container');
+
+      exportButton.addEventListener('click', () => {
+        parent.postMessage({ pluginMessage: { type: 'export-png' } }, '*');
+      });
+
+      onmessage = (event) => {
+        const message = event.data.pluginMessage;
+        if (message.type === 'exported-png') {
+          // Clear previous images and text layers
+          imageContainer.innerHTML = '';
+          textLayersContainer.innerHTML = '';
+
+          // Display PNG images
+          message.pngData.forEach((base64Image) => {
+            const img = document.createElement('img');
+            img.src = `data:image/png;base64,${base64Image}`;
+            imageContainer.appendChild(img);
+          });
+
+          // Display text layers
+          message.textLayers.forEach((textLayer) => {
+            const div = document.createElement('div');
+            div.className = 'text-layer';
+            div.textContent = `Text Layer: ${textLayer.characters}`;
+            textLayersContainer.appendChild(div);
+          });
+        } else if (message.type === 'error') {
+          alert(message.message);
+        }
+      };
+    </script>
+  </body>
+</html>
