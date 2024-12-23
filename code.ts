@@ -1,92 +1,65 @@
-// Show the UI
-figma.showUI(__html__, { width: 600, height: 600 });
+// Plugin to convert top layers (excluding text layers) into PNGs and place them back on the canvas
+figma.showUI(__html__);
 
-// Define a TypeScript interface for node data
-interface NodeData {
-  id: string;
-  name: string;
-  type: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  characters?: string;
-}
+figma.ui.onmessage = async (msg) => {
+  if (msg.type === 'convert-to-png') {
+    const selectedNodes = figma.currentPage.selection;
 
-// Function to collect the top layers and exclude text layers from conversion
-function getTopLayers(nodes: readonly SceneNode[]): SceneNode[] {
-  const topLayers: SceneNode[] = [];
-  for (const node of nodes) {
-    if (node.type !== 'TEXT') {
-      topLayers.push(node);
+    if (selectedNodes.length === 0) {
+      figma.notify('Please select at least one top-level layer or group.');
+      return;
     }
-  }
-  return topLayers;
-}
 
-// Function to extract node details
-function getNodeData(node: SceneNode): NodeData {
-  const baseData: NodeData = {
-    id: node.id,
-    name: node.name,
-    type: node.type,
-    x: node.x,
-    y: node.y,
-    width: node.width,
-    height: node.height,
-  };
+    for (const node of selectedNodes) {
+      if (node.type === 'TEXT') continue; // Skip text nodes directly selected
 
-  if (node.type === 'TEXT') {
-    const textNode = node as TextNode;
-    baseData.characters = textNode.characters;
-  }
+      const isGroupOrTopLevel = node.type === 'GROUP' || node.parent === figma.currentPage;
+      if (!isGroupOrTopLevel) continue;
 
-  return baseData;
-}
+      // Export node as PNG
+      const pngBytes = await node.exportAsync({
+        format: 'PNG',
+        constraint: { type: 'SCALE', value: 1 },
+      });
+      const pngHash = figma.createImage(pngBytes);
+      const pngNode = figma.createRectangle();
+      pngNode.resize(node.width, node.height);
+      pngNode.fills = [{ type: 'IMAGE', scaleMode: 'FILL', imageHash: pngHash.hash }];
 
-// Function to convert nodes to PNG images
-async function convertNodesToPNGs(nodes: SceneNode[]): Promise<string[]> {
-  const imagePromises: Promise<string>[] = nodes.map(async (node) => {
-    const image = await node.exportAsync({ format: 'PNG' });
-    return figma.base64Encode(image);
-  });
-  return Promise.all(imagePromises);
-}
+      // Offset placement to avoid overlapping with the original node
+      pngNode.x = node.x + 500; // Offset by 50px on the x-axis
+      pngNode.y = node.y + 500; // Offset by 50px on the y-axis
+      figma.currentPage.appendChild(pngNode);
 
-// Collect nodes and export as PNG images with text layers intact
-figma.ui.onmessage = async (msg: { type: string }) => {
-  if (msg.type === 'export-png') {
-    try {
-      const selection = figma.currentPage.selection;
-
-      if (selection.length === 0) {
-        figma.ui.postMessage({
-          type: 'error',
-          message: 'Please select at least one node to export',
-        });
-        return;
+      // Clone and position text layers relative to the PNG node
+      if ('findAll' in node) {
+        const textNodes = node.findAll((n: SceneNode) => n.type === 'TEXT') as TextNode[];
+        for (const textNode of textNodes) {
+          const newText = textNode.clone();
+          newText.x = textNode.x + 500; // Offset by 50px on the x-axis
+          newText.y = textNode.y + 500; // Offset by 50px on the y-axis
+          figma.currentPage.appendChild(newText);
+        }
       }
-
-      // Get the top layers excluding text layers
-      const topLayers = getTopLayers(selection);
-
-      // Convert top layers to PNG images
-      const pngData = await convertNodesToPNGs(topLayers);
-
-      // Extract node data for text layers
-      const textLayers = selection.filter((node) => node.type === 'TEXT').map(getNodeData);
-
-      // Send PNG data and text layers back to UI
-      figma.ui.postMessage({
-        type: 'exported-png',
-        pngData: pngData,
-        textLayers: textLayers,
-      });
-    } catch (error: any) {
-      figma.ui.postMessage({
-        type: 'error',
-        message: `Export failed: ${error.message}`,
-      });
     }
+
+    figma.notify('Conversion complete');
   }
+
+  figma.closePlugin();
 };
+
+// HTML part for the plugin UI
+figma.showUI(
+  `
+  <div>
+    <button id="convert">Convert to PNG</button>
+    <script>
+      document.getElementById('convert').onclick = () => {
+        parent.postMessage({ pluginMessage: { type: 'convert-to-png' } }, '*');
+      };
+    </script>
+  </div>
+  `,
+  { width: 200, height: 100 }
+);
