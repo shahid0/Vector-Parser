@@ -52,6 +52,20 @@ figma.ui.onmessage = async (msg) => {
 // HTML part for the plugin UI
 figma.showUI(
   `
+  <style>
+    button {
+      background: #18A0FB;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #0D8DE3;
+    }
+  </style>
   <div>
     <button id="convert">Convert to PNG</button>
     <script>
